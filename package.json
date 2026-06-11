@@ -1,0 +1,68 @@
+{
+  "name": "forge-vscode",
+  "displayName": "Forge",
+  "description": "One-click remote GPU dev on Vast.ai — connect via Remote-SSH and bootstrap the env from a .forge/ config.",
+  "version": "0.0.1",
+  "publisher": "forge",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onUri"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "forge.addConnection",
+        "title": "Forge: Add Connection (paste SSH command)"
+      },
+      {
+        "command": "forge.bootstrap",
+        "title": "Forge: Bootstrap environment (run on remote)"
+      }
+    ],
+    "configuration": {
+      "title": "Forge",
+      "properties": {
+        "forge.identityFile": {
+          "type": "string",
+          "default": "~/.ssh/id_ed25519",
+          "description": "Private key used for Vast SSH connections (IdentityFile in ~/.ssh/config)."
+        },
+        "forge.defaultRemotePath": {
+          "type": "string",
+          "default": "/root",
+          "description": "Remote directory to open when none is provided."
+        },
+        "forge.autoBootstrapOnConnect": {
+          "type": "boolean",
+          "default": true,
+          "description": "After connecting, automatically run the .forge/ bootstrap on the remote."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "node esbuild.js --production",
+    "watch": "node esbuild.js --watch",
+    "compile": "node esbuild.js",
+    "lint": "tsc --noEmit",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.21.0",
+    "typescript": "^5.4.0"
+  }
+}
