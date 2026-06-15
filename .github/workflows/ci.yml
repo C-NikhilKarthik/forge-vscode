@@ -7,6 +7,15 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Needed so the rolling "latest" release can be created/updated.
+permissions:
+  contents: write
+
+# Avoid two main-pushes racing on the "latest" release.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -30,10 +39,24 @@ jobs:
           --baseImagesUrl https://github.com/${{ github.repository }}/raw/HEAD
           -o forge-vscode.vsix
 
-      # Download this from the run's "Artifacts" and install with:
-      #   code --install-extension forge-vscode.vsix
+      # Always available from the run's "Artifacts" too.
       - uses: actions/upload-artifact@v4
         with:
           name: forge-vscode-vsix
           path: forge-vscode.vsix
           if-no-files-found: error
+
+      # On every push to main, (re)publish a rolling "latest" release so there's
+      # always a fresh, directly-downloadable .vsix — no manual tagging needed.
+      #   download: gh release download latest -p '*.vsix'
+      #   or: https://github.com/<owner>/<repo>/releases/download/latest/forge-vscode.vsix
+      - name: Publish rolling "latest" release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest forge-vscode.vsix \
+            --title "Latest build (main)" \
+            --notes "Auto-built from ${GITHUB_SHA}. Install: code --install-extension forge-vscode.vsix" \
+            --target "${GITHUB_SHA}"
