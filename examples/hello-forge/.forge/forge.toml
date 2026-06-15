@@ -1,0 +1,21 @@
+# Minimal Forge test config. Drop the .forge/ folder into any repo, commit, and
+# run "Forge: Open Repo on Remote" — or open a folder containing it on the box
+# and run "Forge: Bootstrap".
+#
+# What it does: makes a small conda env with the HF CLI, then downloads a tiny
+# public model (~17 MB) from the Hugging Face Hub. Fast and dependency-light.
+
+[env]
+file = "env.toml"
+name = "forge-test"
+
+[tasks]
+# Proves the env works and that setup steps run inside it. No repo packaging
+# needed (unlike `pip install -e .`).
+setup = ["python -c \"import huggingface_hub, sys; print('forge env OK — hub', huggingface_hub.__version__, '| python', sys.version.split()[0])\""]
+
+# One tiny model download. hf://<owner>/<name> is a model; prefix with
+# datasets/ for a dataset. Cached under /data if a volume is mounted.
+[[data]]
+src  = "hf://prajjwal1/bert-tiny"
+dest = "/data/forge-test/bert-tiny"

@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Forge — Open in VS Code",
+  "version": "0.0.1",
+  "description": "Adds an \"Open in VS Code\" button to Vast.ai instance pages. Opens a Remote-SSH window via the Forge VS Code extension.",
+  "content_scripts": [
+    {
+      "matches": ["*://*.vast.ai/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

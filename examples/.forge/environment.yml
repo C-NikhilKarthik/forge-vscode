@@ -1,8 +1,0 @@
-name: project
-channels:
-  - conda-forge
-dependencies:
-  - python=3.11
-  - pip
-  - pip:
-      - huggingface_hub   # needed for hf:// data sources

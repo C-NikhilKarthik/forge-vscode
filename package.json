@@ -12,11 +12,19 @@
     "Other"
   ],
   "main": "./dist/extension.js",
+  "extensionDependencies": [
+    "ms-vscode-remote.remote-ssh"
+  ],
   "activationEvents": [
-    "onUri"
+    "onUri",
+    "onStartupFinished"
   ],
   "contributes": {
     "commands": [
+      {
+        "command": "forge.openRepoOnRemote",
+        "title": "Forge: Open Repo on Remote"
+      },
       {
         "command": "forge.addConnection",
         "title": "Forge: Add Connection (paste SSH command)"
@@ -36,8 +44,8 @@
         },
         "forge.defaultRemotePath": {
           "type": "string",
-          "default": "/root",
-          "description": "Remote directory to open when none is provided."
+          "default": "/workspace",
+          "description": "Base remote directory. Repos are cloned to <this>/<repo-name>."
         },
         "forge.autoBootstrapOnConnect": {
           "type": "boolean",
@@ -56,7 +64,8 @@
     "package": "vsce package"
   },
   "dependencies": {
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.1.0",
+    "smol-toml": "^1.6.1"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",

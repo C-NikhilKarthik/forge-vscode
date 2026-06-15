@@ -6,7 +6,9 @@ import { connect } from "./connect";
  * "Forge: Add Connection" — prompt for the SSH command Vast shows, parse it,
  * and connect. This is the stable fallback that needs no web component.
  */
-export async function addConnectionCommand(): Promise<void> {
+export async function addConnectionCommand(
+  context: vscode.ExtensionContext
+): Promise<void> {
   const input = await vscode.window.showInputBox({
     title: "Forge: Add Connection",
     prompt: "Paste the SSH command from the Vast.ai instance page",
@@ -26,5 +28,5 @@ export async function addConnectionCommand(): Promise<void> {
     return;
   }
 
-  await connect(conn);
+  await connect(conn, context);
 }

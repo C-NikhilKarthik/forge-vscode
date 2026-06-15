@@ -30,6 +30,9 @@ export async function writeManagedHost(
     `    IdentityFile ${expandHome(identityFile)}`,
     `    StrictHostKeyChecking accept-new`,
     `    UserKnownHostsFile ${path.join(SSH_DIR, "known_hosts")}`,
+    // Forward the local SSH agent so git on the box can auth to GitHub with your
+    // key (for SSH-origin repos) without ever copying it to the box.
+    `    ForwardAgent yes`,
     end,
     "",
   ].join("\n");

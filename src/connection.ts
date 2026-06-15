@@ -8,6 +8,8 @@ export interface ConnInfo {
   user: string;
   /** Optional git repo to clone onto the box. */
   repo?: string;
+  /** Optional branch to check out after cloning. */
+  branch?: string;
   /** Remote directory to open. */
   path?: string;
 }
@@ -16,6 +18,43 @@ export interface ConnInfo {
 export function aliasFor(conn: ConnInfo): string {
   const host = conn.host.replace(/[^a-zA-Z0-9.-]/g, "-");
   return `forge-${host}-${conn.port}`;
+}
+
+/** Derive a directory name from a git URL, e.g. git@github.com:me/proj.git → proj. */
+export function repoNameFromUrl(url: string): string {
+  const tail = url.replace(/\/+$/, "").split(/[/:]/).pop() ?? "repo";
+  return tail.replace(/\.git$/, "") || "repo";
+}
+
+/**
+ * Normalize any GitHub remote — HTTPS, SSH, or an SSH host *alias* like
+ * `git@github-work:owner/repo` — to the canonical `git@github.com:owner/repo.git`
+ * form. The box authenticates with its own key (see remoteAuth), so we don't
+ * depend on the user's local SSH config/aliases existing on the box. Non-GitHub
+ * or unrecognised URLs are returned unchanged.
+ */
+export function toGitHubSshUrl(url: string): string {
+  const u = url.trim();
+
+  // https://github.com/owner/repo(.git)
+  let m = u.match(/^https?:\/\/github\.com\/([^/]+)\/(.+?)(?:\.git)?\/?$/);
+  if (m) {
+    return `git@github.com:${m[1]}/${m[2]}.git`;
+  }
+
+  // ssh://git@github.com/owner/repo(.git)
+  m = u.match(/^ssh:\/\/[^@]+@([^/]+)\/([^/]+)\/(.+?)(?:\.git)?\/?$/);
+  if (m && /github/i.test(m[1])) {
+    return `git@github.com:${m[2]}/${m[3]}.git`;
+  }
+
+  // git@<host-or-alias>:owner/repo(.git) — collapse any "github" alias to github.com
+  m = u.match(/^[^@]+@([^:]+):([^/]+)\/(.+?)(?:\.git)?\/?$/);
+  if (m && /github/i.test(m[1])) {
+    return `git@github.com:${m[2]}/${m[3]}.git`;
+  }
+
+  return u;
 }
 
 /**

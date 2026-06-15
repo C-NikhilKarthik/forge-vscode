@@ -2,15 +2,15 @@
 #
 # Forge remote bootstrap — reusable core.
 #
-# Sets up a micromamba environment and downloads datasets/checkpoints declared
-# in .forge/, caching to a /data volume if one is mounted. Idempotent: every
-# step checks for prior completion, so re-running is cheap and safe.
+# Sets up a conda environment and downloads datasets/checkpoints declared in
+# .forge/, caching to a /data volume if one is mounted. Idempotent: every step
+# checks for prior completion, so re-running is cheap and safe.
 #
 # Inputs (env vars, set by the caller — the VS Code extension or a future CLI):
-#   FORGE_ENV_NAME   conda/micromamba env name            (required)
-#   FORGE_ENV_FILE   path to environment.yml, repo-relative (required)
-#   FORGE_DATA       newline-delimited "src|dest" entries  (optional)
-#   FORGE_SETUP      newline-delimited shell commands      (optional)
+#   FORGE_ENV_NAME   conda env name                              (required)
+#   FORGE_ENV_YAML   environment.yml content (generated from env.toml) (required)
+#   FORGE_DATA       newline-delimited "src|dest" entries        (optional)
+#   FORGE_SETUP      newline-delimited shell commands            (optional)
 #
 set -euo pipefail
 
@@ -27,41 +27,58 @@ DONE_DIR="$CACHE_ROOT/.forge/done"
 mkdir -p "$DONE_DIR"
 log "cache root: $CACHE_ROOT"
 
-# 2. Install micromamba if absent.
-MAMBA_ROOT="${MAMBA_ROOT_PREFIX:-$HOME/micromamba}"
-export MAMBA_ROOT_PREFIX="$MAMBA_ROOT"
-if ! command -v micromamba >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/micromamba" ]; then
-  log "installing micromamba…"
-  mkdir -p "$HOME/.local/bin"
+# 2. Resolve a conda: reuse an existing one (common on Vast images), else install
+#    Miniconda3. `mamba` is used as a faster drop-in solver when available.
+find_conda() {
+  for c in conda mamba; do
+    if command -v "$c" >/dev/null 2>&1; then echo "$c"; return 0; fi
+  done
+  for base in "$HOME/miniconda3" "$HOME/miniforge3" /opt/conda; do
+    if [ -x "$base/bin/conda" ]; then echo "$base/bin/conda"; return 0; fi
+  done
+  return 1
+}
+
+if ! CONDA="$(find_conda)"; then
+  log "no conda found — installing Miniconda3…"
   arch="$(uname -m)"; os="$(uname -s)"
   case "$os-$arch" in
-    Linux-x86_64)  plat="linux-64" ;;
-    Linux-aarch64) plat="linux-aarch64" ;;
-    Darwin-arm64)  plat="osx-arm64" ;;
-    Darwin-x86_64) plat="osx-64" ;;
+    Linux-x86_64)  mc="Miniconda3-latest-Linux-x86_64.sh" ;;
+    Linux-aarch64) mc="Miniconda3-latest-Linux-aarch64.sh" ;;
+    Darwin-arm64)  mc="Miniconda3-latest-MacOSX-arm64.sh" ;;
+    Darwin-x86_64) mc="Miniconda3-latest-MacOSX-x86_64.sh" ;;
     *) die "unsupported platform: $os-$arch" ;;
   esac
-  curl -Ls "https://micro.mamba.pm/api/micromamba/$plat/latest" \
-    | tar -xvj -C "$HOME/.local" bin/micromamba >/dev/null
+  curl -Ls "https://repo.anaconda.com/miniconda/$mc" -o /tmp/forge-miniconda.sh
+  bash /tmp/forge-miniconda.sh -b -p "$HOME/miniconda3"
+  rm -f /tmp/forge-miniconda.sh
+  CONDA="$HOME/miniconda3/bin/conda"
 fi
-export PATH="$HOME/.local/bin:$PATH"
-command -v micromamba >/dev/null 2>&1 || die "micromamba not on PATH after install"
+log "using conda: $CONDA"
 
-# 3. Create or update the environment.
+# 3. Create or update the environment from the generated environment.yml.
 [ -n "${FORGE_ENV_NAME:-}" ] || die "FORGE_ENV_NAME not set"
-[ -f "${FORGE_ENV_FILE:-environment.yml}" ] || die "env file not found: ${FORGE_ENV_FILE:-environment.yml}"
-if micromamba env list | awk '{print $1}' | grep -qx "$FORGE_ENV_NAME"; then
+[ -n "${FORGE_ENV_YAML:-}" ] || die "FORGE_ENV_YAML not set"
+ENV_FILE="$(mktemp /tmp/forge-env.XXXXXX.yml)"
+printf '%s' "$FORGE_ENV_YAML" > "$ENV_FILE"
+trap 'rm -f "$ENV_FILE"' EXIT
+
+if "$CONDA" env list | awk '{print $1}' | grep -qx "$FORGE_ENV_NAME"; then
   log "updating env '$FORGE_ENV_NAME'…"
-  micromamba update -y -n "$FORGE_ENV_NAME" -f "$FORGE_ENV_FILE"
+  "$CONDA" env update -n "$FORGE_ENV_NAME" -f "$ENV_FILE" --prune
 else
   log "creating env '$FORGE_ENV_NAME'…"
-  micromamba create -y -n "$FORGE_ENV_NAME" -f "$FORGE_ENV_FILE"
+  "$CONDA" env create -y -n "$FORGE_ENV_NAME" -f "$ENV_FILE"
 fi
 
-run_in_env() { micromamba run -n "$FORGE_ENV_NAME" bash -lc "$1"; }
+run_in_env() { "$CONDA" run -n "$FORGE_ENV_NAME" bash -lc "$1"; }
 
 # 4. Download data entries (skip if already present via sentinel).
 if [ -n "${FORGE_DATA:-}" ]; then
+  # Prefer the new `hf` CLI; fall back to the older `huggingface-cli` alias.
+  HF_CLI="huggingface-cli"
+  if run_in_env "command -v hf >/dev/null 2>&1"; then HF_CLI="hf"; fi
+
   while IFS='|' read -r src dest; do
     [ -n "$src" ] || continue
     sentinel="$DONE_DIR/$(printf '%s' "$src$dest" | shasum | cut -d' ' -f1)"
@@ -72,7 +89,14 @@ if [ -n "${FORGE_DATA:-}" ]; then
     mkdir -p "$(dirname "$dest")"
     log "downloading $src -> $dest"
     case "$src" in
-      hf://*)   run_in_env "huggingface-cli download '${src#hf://}' --local-dir '$dest'" ;;
+      hf://*)
+        ref="${src#hf://}"; rtype="model"
+        case "$ref" in
+          datasets/*) rtype="dataset"; ref="${ref#datasets/}" ;;
+          models/*)   rtype="model";   ref="${ref#models/}" ;;
+        esac
+        run_in_env "$HF_CLI download --repo-type '$rtype' '$ref' --local-dir '$dest'"
+        ;;
       s3://*)   run_in_env "aws s3 sync '$src' '$dest'" ;;
       http://*|https://*) curl -L --fail -o "$dest" "$src" ;;
       *) die "unknown data scheme for: $src" ;;
@@ -81,7 +105,7 @@ if [ -n "${FORGE_DATA:-}" ]; then
   done <<< "$FORGE_DATA"
 fi
 
-# 5. Setup steps.
+# 5. Setup steps (run inside the env).
 if [ -n "${FORGE_SETUP:-}" ]; then
   while IFS= read -r cmd; do
     [ -n "$cmd" ] || continue
@@ -90,4 +114,4 @@ if [ -n "${FORGE_SETUP:-}" ]; then
   done <<< "$FORGE_SETUP"
 fi
 
-log "bootstrap complete. activate with: micromamba activate $FORGE_ENV_NAME"
+log "bootstrap complete. activate with: conda activate $FORGE_ENV_NAME"

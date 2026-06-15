@@ -1,0 +1,30 @@
+# Forge project config. Lives at .forge/forge.toml in your repo.
+# Machine lifecycle is managed in the Vast.ai browser UI, not here.
+
+[workspace]
+# repo is optional — used to clone onto the box if the folder is absent.
+repo = "git@github.com:me/project.git"
+path = "/root/project"               # remote dir to open
+
+[env]
+file = "env.toml"                    # the conda env spec (TOML), relative to .forge/
+name = "project"                     # conda env name to create on the box
+
+[tasks]
+# Shell commands run (inside the env) after the env + data are ready.
+setup = ["pip install -e ."]
+# Optional default command — surfaced for you to run, not executed automatically.
+run = ["python train.py"]
+
+# Datasets / checkpoints to fetch on the remote. Downloaded once; cached to a
+# mounted /data volume if present, else to ~/.forge-cache. Re-runs skip these.
+# Keep [[data]] blocks LAST: in TOML, bare keys after them bind to the data table.
+[[data]]
+src  = "hf://datasets/openai/gsm8k"   # hf://datasets/… → --repo-type dataset
+dest = "/data/datasets/gsm8k"
+# [[data]]
+# src  = "s3://my-bucket/models/llama.pt"
+# dest = "/data/checkpoints/llama.pt"
+# [[data]]
+# src  = "https://example.com/weights.bin"
+# dest = "/data/checkpoints/weights.bin"
