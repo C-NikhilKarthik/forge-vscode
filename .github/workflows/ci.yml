@@ -1,0 +1,39 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Package VSIX
+        run: >-
+          npx @vscode/vsce package --allow-missing-repository
+          --baseContentUrl https://github.com/${{ github.repository }}/raw/HEAD
+          --baseImagesUrl https://github.com/${{ github.repository }}/raw/HEAD
+          -o forge-vscode.vsix
+
+      # Download this from the run's "Artifacts" and install with:
+      #   code --install-extension forge-vscode.vsix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forge-vscode-vsix
+          path: forge-vscode.vsix
+          if-no-files-found: error

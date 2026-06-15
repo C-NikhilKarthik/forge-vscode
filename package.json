@@ -12,6 +12,9 @@
     "Other"
   ],
   "main": "./dist/extension.js",
+  "extensionKind": [
+    "ui"
+  ],
   "extensionDependencies": [
     "ms-vscode-remote.remote-ssh"
   ],
@@ -32,6 +35,10 @@
       {
         "command": "forge.bootstrap",
         "title": "Forge: Bootstrap environment (run on remote)"
+      },
+      {
+        "command": "forge.cleanupRemote",
+        "title": "Forge: Clean Up Remote (remove env / data / repo)"
       }
     ],
     "configuration": {
@@ -51,6 +58,19 @@
           "type": "boolean",
           "default": true,
           "description": "After connecting, automatically run the .forge/ bootstrap on the remote."
+        },
+        "forge.gitAuth": {
+          "type": "string",
+          "enum": [
+            "relay",
+            "box-key"
+          ],
+          "enumDescriptions": [
+            "Forward your local SSH key for the clone (ssh -A). Nothing is stored on the box; falls back to box-key if no local key / relay fails.",
+            "Generate a dedicated SSH key on the box and authorize it on GitHub once. Needed for terminal/agent git on images whose tmux strips forwarded credentials."
+          ],
+          "default": "relay",
+          "description": "How the box authenticates to GitHub for cloning."
         }
       }
     }
@@ -71,6 +91,7 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.9.2",
     "esbuild": "^0.21.0",
     "typescript": "^5.4.0"
   }

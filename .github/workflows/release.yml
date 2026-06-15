@@ -1,0 +1,53 @@
+name: release
+
+# Tag a version to publish a release with the .vsix attached:
+#   npm version patch        # bumps package.json + creates a git tag
+#   git push --follow-tags
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Package VSIX
+        run: >-
+          npx @vscode/vsce package --allow-missing-repository
+          --baseContentUrl https://github.com/${{ github.repository }}/raw/HEAD
+          --baseImagesUrl https://github.com/${{ github.repository }}/raw/HEAD
+          -o forge-vscode.vsix
+
+      - name: Create GitHub Release with the .vsix attached
+        uses: softprops/action-gh-release@v2
+        with:
+          files: forge-vscode.vsix
+          generate_release_notes: true
+
+      # Optional: also publish to the VS Code Marketplace / Open VSX so it's
+      # searchable in the Extensions panel. Requires you to create a publisher and
+      # add the token as a repo secret, then uncomment:
+      #
+      # - name: Publish to VS Code Marketplace
+      #   run: npx @vscode/vsce publish --packagePath forge-vscode.vsix
+      #   env:
+      #     VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      #
+      # - name: Publish to Open VSX
+      #   run: npx ovsx publish forge-vscode.vsix -p ${{ secrets.OVSX_TOKEN }}

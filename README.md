@@ -16,6 +16,23 @@ handles the annoying parts:
    existing conda or installing Miniconda) and downloads the datasets/checkpoints
    declared in `.forge/`, caching to a `/data` volume if one is mounted.
 
+## Install
+
+Forge isn't on the Marketplace — install the packaged `.vsix`:
+
+- **From a release:** download `forge-vscode.vsix` from the latest
+  [GitHub Release](../../releases), then either run
+  `code --install-extension forge-vscode.vsix` or use the Extensions panel →
+  `⋯` → **Install from VSIX…**. Cut a release by tagging: `npm version patch &&
+  git push --follow-tags` (the `release` workflow attaches the `.vsix`).
+- **Latest from CI:** every push to `main` uploads a fresh `forge-vscode.vsix` as
+  a build artifact — grab it from the run's **Artifacts** and install it the same way.
+- **Build locally:** `npm ci && npx @vscode/vsce package` → install the resulting
+  `.vsix`.
+
+After installing, reload VS Code. Forge auto-installs its **Remote - SSH**
+dependency.
+
 ## Setup (once)
 
 - Install the **Remote - SSH** extension (`ms-vscode-remote.remote-ssh`).
@@ -41,19 +58,22 @@ Vast instance page — it fires a `vscode://forge.forge/connect?...` deep link.
 environment**. Reads `.forge/forge.toml`, sets up the conda env, downloads data.
 Safe to re-run — completed steps are skipped.
 
-## Git auth (the box gets its own key — your creds are never copied)
-
-Forge gives the **box its own GitHub identity** rather than forwarding or copying
-yours (forwarding breaks on images that auto-start tmux). On first clone it
-generates a dedicated ed25519 key on the box, points all git at it, and — if the
-box isn't authorized yet — shows you the public key with a **Copy & open GitHub**
-button. You add it to your GitHub SSH keys once (it can live on a `/data` volume
-so it survives instance rebuilds), and from then on clone/push/pull work in **any
-shell, the Source Control panel, and for AI agents** — tmux or not. Your laptop
-keys and any PAT never touch the box; the box key is revocable from GitHub.
+## Git auth (`forge.gitAuth`)
 
 Any origin form works — `git@github.com:…`, `https://github.com/…`, or an SSH
 host-alias like `git@github-work:…` — Forge normalizes it to the canonical repo.
+Two strategies:
+
+- **`relay`** (default): Forge forwards your **local** SSH key for the clone
+  (`ssh -A`), so the box authenticates with the key you *already* have on GitHub —
+  **nothing is stored on the box** and there's no key to add. If your agent is
+  empty it lists your `~/.ssh` keys (one → uses it, several → asks which) and loads
+  the choice. Push/pull then works via the **Source Control panel**.
+- **`box-key`**: Forge generates a dedicated key **on the box**, and shows you its
+  public key to add to GitHub once (it can persist on a `/data` volume). Use this
+  when you need **terminal** `git push` / **AI agents** to authenticate — because
+  many GPU images auto-start `tmux`, which strips forwarded credentials from
+  shells. Relay falls back to this automatically if it can't forward a key.
 
 ## The `.forge/` config
 

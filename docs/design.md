@@ -32,17 +32,21 @@ the remote — so they see the real data. This is the Lightning.ai Studio model.
 
 ## Key design decisions
 
-- **Git auth = the box gets its own key, not your creds.** Credential *forwarding*
-  (SSH agent / `GIT_ASKPASS`) is unreliable in practice because many GPU images
-  auto-start **tmux**, which strips the forwarded env from shells. So instead
-  `remoteAuth.ts` runs `resources/setup-git-auth.sh` to generate a dedicated
-  ed25519 key **on the box** (persisted on `/data` if mounted), point
-  `git config --global core.sshCommand` at it, and test `ssh -T git@github.com`;
-  if unauthorized it shows the public key for the user to add to GitHub once. The
-  laptop's keys/PAT are never copied — the box earns a revocable identity. Works
-  in every shell (tmux or not), the GUI, and for AI agents. `connection.ts`
-  `toGitHubSshUrl()` normalizes any origin (HTTPS / SSH / host-alias like
-  `github-work`) to canonical `git@github.com:owner/repo.git`.
+- **Git auth = relay first, box-key fallback** (`forge.gitAuth`, default `relay`):
+  - **relay** (`localCreds.ts`): forward your local SSH key for the clone via
+    `ssh -A` — the box authenticates to GitHub with *your* already-authorized key,
+    nothing stored on the box, no key to add. If the agent is empty it lists
+    `~/.ssh` keys (one → use it, several → ask which) and loads the choice.
+  - **box-key** (`remoteAuth.ts` + `resources/setup-git-auth.sh`): fallback (or
+    forced) — generate a dedicated ed25519 key **on the box** (persisted on `/data`
+    if mounted), point `git config --global core.sshCommand` at it, test
+    `ssh -T git@github.com`, and if unauthorized show the public key to add to
+    GitHub once. Needed for **terminal/agent** git, because forwarding (relay or
+    `GIT_ASKPASS`) is stripped by the **tmux** many GPU images auto-start.
+  - `connection.ts` `toGitHubSshUrl()` normalizes any origin (HTTPS / SSH /
+    host-alias like `github-work`) to canonical `git@github.com:owner/repo.git`.
+  - Caveat: relay covers clone + Source Control–panel push/pull (extension host);
+    terminal `git push` needs box-key on tmux images.
 - **Terminals in a remote window run on the box.** So `bootstrap.ts` runs the
   script *directly* in a remote integrated terminal (`… | base64 -d | bash -s`) —
   no `ssh` hop.
